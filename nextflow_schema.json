@@ -456,6 +456,12 @@
                     "type": "boolean",
                     "fa_icon": "fas fa-fast-forward",
                     "description": "Specify this parameter to skip all of the variant calling and mapping steps in the pipeline."
+                },
+                "min_allele_frequency": {
+                    "type": "number",
+                    "default": 0.25,
+                    "description": "Minimum allele frequency threshold for variant calling with iVar.",
+                    "fa_icon": "fas fa-percentage"
                 }
             },
             "fa_icon": "fas fa-dna"
