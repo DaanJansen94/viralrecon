@@ -59,6 +59,7 @@ include { CUTADAPT } from '../modules/local/cutadapt'
 include { MULTIQC  } from '../modules/local/multiqc_illumina'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME   } from '../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_AMPLICON } from '../modules/local/plot_mosdepth_regions'
+include { APOBEC3_ANALYSIS_IVAR } from '../modules/local/apobec3_analysis/main'
 
 //
 // SUBWORKFLOW: Consisting of a mix of local and nf-core/modules
@@ -113,6 +114,7 @@ def fail_mapped_reads = [:]
 workflow ILLUMINA {
 
     ch_versions = Channel.empty()
+    ch_multiqc_files = Channel.empty()
 
     //
     // SUBWORKFLOW: Uncompress and prepare reference genome files
@@ -434,6 +436,18 @@ workflow ILLUMINA {
         ch_snpeff_multiqc         = VARIANTS_IVAR.out.snpeff_csv
         ch_snpsift_txt            = VARIANTS_IVAR.out.snpsift_txt
         ch_versions               = ch_versions.mix(VARIANTS_IVAR.out.versions)
+
+        // Define a channel for the summary file that may already exist
+        summary_file_ch = Channel.fromPath("${params.outdir}/variants/ivar/apobec3/apobec_summary.txt", checkIfExists: true)
+            .ifEmpty { file("NO_FILE") }
+
+        APOBEC3_ANALYSIS_IVAR (
+            VARIANTS_IVAR.out.vcf,
+            PREPARE_GENOME.out.fasta,
+            file("$projectDir/bin/apobec3_analysis.py"),
+            summary_file_ch
+        )
+        ch_versions = ch_versions.mix(APOBEC3_ANALYSIS_IVAR.out.versions)
     }
 
     //
