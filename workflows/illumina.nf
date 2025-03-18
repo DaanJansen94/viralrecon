@@ -437,17 +437,93 @@ workflow ILLUMINA {
         ch_snpsift_txt            = VARIANTS_IVAR.out.snpsift_txt
         ch_versions               = ch_versions.mix(VARIANTS_IVAR.out.versions)
 
-        // Define a channel for the summary file that may already exist
-        summary_file_ch = Channel.fromPath("${params.outdir}/variants/ivar/apobec3/apobec_summary.txt", checkIfExists: true)
-            .ifEmpty { file("NO_FILE") }
-
         APOBEC3_ANALYSIS_IVAR (
             VARIANTS_IVAR.out.vcf,
             PREPARE_GENOME.out.fasta,
-            file("$projectDir/bin/apobec3_analysis.py"),
-            summary_file_ch
+            file("$projectDir/bin/apobec3_analysis.py")
         )
         ch_versions = ch_versions.mix(APOBEC3_ANALYSIS_IVAR.out.versions)
+        
+        // Wait for all APOBEC3 analyses to finish and trigger the summary
+        APOBEC3_ANALYSIS_IVAR.out.csv
+            .map { it[1] }
+            .collect()
+            .set { ch_apobec3_csvs }
+            
+        // Make the final combined APOBEC3 summary with all samples
+        process COMBINE_APOBEC3_SUMMARY {
+            publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, overwrite: true
+            
+            input:
+            path(csv_files)
+            
+            output:
+            path "apobec_summary.txt"
+            
+            script:
+            """
+            #!/usr/bin/env python3
+            import os
+            import glob
+            import pandas as pd
+            
+            # CSV files are directly available in the working directory
+            files = glob.glob("*_apobec_mutations.csv")
+            print(f"Found {len(files)} CSV files: {files}")
+            
+            # Process each file to extract mutation data
+            sample_data = {}
+            for file in files:
+                try:
+                    sample = file.replace("_apobec_mutations.csv", "")
+                    df = pd.read_csv(file)
+                    total = len(df)
+                    tc_tt = len(df[df['type'] == 'TC>TT']) if 'type' in df.columns else 0
+                    ga_aa = len(df[df['type'] == 'GA>AA']) if 'type' in df.columns else 0
+                    sample_data[sample] = {'total': total, 'tc_tt': tc_tt, 'ga_aa': ga_aa}
+                    print(f"Sample {sample}: {total} mutations ({tc_tt} TC>TT, {ga_aa} GA>AA)")
+                except Exception as e:
+                    print(f"Error with {file}: {e}")
+            
+            # Create summary file
+            with open("apobec_summary.txt", "w") as f:
+                f.write("APOBEC3 Mutation Analysis Summary\\n")
+                f.write("================================\\n\\n")
+                
+                f.write("Summary Table - APOBEC3 Mutations by Sample\\n")
+                f.write("------------------------------------------\\n")
+                f.write("{:<30} {:<15} {:<15} {:<15}\\n".format("Sample", "Total", "TC>TT", "GA>AA"))
+                f.write("{:<30} {:<15} {:<15} {:<15}\\n".format("-"*30, "-"*15, "-"*15, "-"*15))
+                
+                for sample, counts in sorted(sample_data.items()):
+                    f.write("{:<30} {:<15} {:<15} {:<15}\\n".format(
+                        sample, counts['total'], counts['tc_tt'], counts['ga_aa']))
+                
+                f.write("\\n\\n")
+                
+                # Calculate overall statistics
+                total_mutations = sum(data['total'] for data in sample_data.values())
+                tc_tt_mutations = sum(data['tc_tt'] for data in sample_data.values())
+                ga_aa_mutations = sum(data['ga_aa'] for data in sample_data.values())
+                
+                f.write(f"Total APOBEC3-related mutations across all samples: {total_mutations}\\n")
+                f.write(f"Total TC>TT mutations: {tc_tt_mutations}\\n")
+                f.write(f"Total GA>AA mutations: {ga_aa_mutations}\\n\\n")
+                
+                f.write("Per Sample Breakdown (Detailed):\\n")
+                f.write("-------------------------------\\n")
+                for sample, counts in sorted(sample_data.items()):
+                    f.write(f"\\nSample: {sample}\\n")
+                    f.write(f"Total mutations: {counts['total']}\\n")
+                    f.write(f"TC>TT mutations: {counts['tc_tt']}\\n")
+                    f.write(f"GA>AA mutations: {counts['ga_aa']}\\n")
+            
+            print("Summary file created successfully")
+            """
+        }
+        
+        // Connect the CSV files to the combine process
+        COMBINE_APOBEC3_SUMMARY(ch_apobec3_csvs)
     }
 
     //

@@ -8,17 +8,13 @@ process APOBEC3_ANALYSIS_IVAR {
         'python:3.9.5' }"
 
     publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, pattern: "*_apobec_mutations.csv"
-    publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, saveAs: { filename -> 
-        if (filename == "apobec_summary.txt") return "apobec_summary.txt" 
-        else filename 
-    }, pattern: "apobec_summary.txt"
+    publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, pattern: "apobec_summary.txt"
     publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, pattern: "versions.yml"
 
     input:
     tuple val(meta), path(variants)
     path(reference)
     path(apobec3_script)
-    path summary_file
 
     output:
     tuple val(meta), path("*_apobec_mutations.csv"), emit: csv
@@ -30,14 +26,11 @@ process APOBEC3_ANALYSIS_IVAR {
 
     script:
     def prefix = task.ext.prefix ?: "${meta.id}"
-    def summary_copy_cmd = summary_file.name != "NO_FILE" ? "[ ! -f ./\$(basename ${summary_file}) ] && cp ${summary_file} . || echo 'Summary file already exists'" : ""
     """
     mkdir -p /tmp/package_install
     export PIP_TARGET=/tmp/package_install
     export PYTHONPATH="/tmp/package_install"
     pip install --no-cache-dir --target=/tmp/package_install numpy==1.22.4 pandas==1.3.5 pysam==0.19.0
-    
-    ${summary_copy_cmd}
     
     python ${apobec3_script} ${variants} ${reference}
     

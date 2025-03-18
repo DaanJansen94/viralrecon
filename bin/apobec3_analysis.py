@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import glob
 import sys
+import shutil
 
 def main():
     # Get command line arguments
@@ -115,85 +116,51 @@ def main():
     print(f"Total GA>AA mutations found: {ga_aa_count}")
     print(f"Total APOBEC3-related mutations: {len(sample_mutations)}")
 
-    # Load existing summary data if it exists
-    summary_file = "apobec_summary.txt"
-    existing_data = {}
+    # Create a complete summary file
+    # Instead of just finding files in the current directory,
+    # Save current sample data to a dictionary
+    sample_data = {}
     
-    if os.path.exists(summary_file):
+    # First check for files in the current directory (which includes the one we just processed)
+    current_files = glob.glob("*_apobec_mutations.csv")
+    print(f"Found {len(current_files)} sample file(s) in current directory")
+    
+    # Extract data from current sample
+    for file in current_files:
         try:
-            # Try to extract existing sample data
-            with open(summary_file, 'r') as f:
-                lines = f.readlines()
-                in_sample_section = False
-                current_sample = None
-                
-                for line in lines:
-                    if line.startswith("Sample:"):
-                        current_sample = line.split("Sample:")[1].strip()
-                        existing_data[current_sample] = {'total': 0, 'tc_tt': 0, 'ga_aa': 0}
-                        in_sample_section = True
-                    elif in_sample_section and line.startswith("Total mutations:"):
-                        existing_data[current_sample]['total'] = int(line.split(":")[1].strip())
-                    elif in_sample_section and line.startswith("TC>TT mutations:"):
-                        existing_data[current_sample]['tc_tt'] = int(line.split(":")[1].strip())
-                    elif in_sample_section and line.startswith("GA>AA mutations:"):
-                        existing_data[current_sample]['ga_aa'] = int(line.split(":")[1].strip())
+            file_sample = os.path.basename(file).replace("_apobec_mutations.csv", "")
+            df = pd.read_csv(file)
+            
+            total_count = len(df)
+            tc_tt = len(df[df['type'] == 'TC>TT']) if 'type' in df.columns else 0
+            ga_aa = len(df[df['type'] == 'GA>AA']) if 'type' in df.columns else 0
+            
+            sample_data[file_sample] = {
+                'total': total_count,
+                'tc_tt': tc_tt,
+                'ga_aa': ga_aa
+            }
+            print(f"Added sample {file_sample} with {total_count} mutations")
         except Exception as e:
-            print(f"Error parsing existing summary file: {e}")
-            # If there's an error parsing, we'll create a new file
-            existing_data = {}
-
-    # Process current sample mutations
-    if sample_df.empty:
-        return  # Skip if no mutations found
-        
-    # Current sample data
-    sample_data = {
+            print(f"Error reading {file}: {e}")
+    
+    # Store basic summary data for current sample in a file that can be combined later
+    current_sample_summary = {
+        'sample': sample_name,
         'total': len(sample_mutations),
         'tc_tt': tc_tt_count,
         'ga_aa': ga_aa_count
     }
     
-    # Add current sample to existing data
-    existing_data[sample_name] = sample_data
+    # Write this data to a special file that can be used for combining later
+    with open(f"{sample_name}_summary_data.txt", 'w') as f:
+        f.write(f"Sample: {sample_name}\n")
+        f.write(f"Total: {len(sample_mutations)}\n")
+        f.write(f"TC>TT: {tc_tt_count}\n")
+        f.write(f"GA>AA: {ga_aa_count}\n")
     
-    # Collect all sample mutations
-    all_sample_files = glob.glob("*_apobec_mutations.csv")
-    all_mutations = []
-    
-    for file in all_sample_files:
-        try:
-            # Extract sample name from filename
-            file_sample = file.replace("_apobec_mutations.csv", "")
-            
-            # Only read the data part (not the summary at the end)
-            df = pd.read_csv(file)
-            if not df.empty:
-                # If sample not in existing_data, add it
-                if file_sample not in existing_data:
-                    tc_tt = len(df[df['type'] == 'TC>TT'])
-                    ga_aa = len(df[df['type'] == 'GA>AA'])
-                    existing_data[file_sample] = {
-                        'total': len(df),
-                        'tc_tt': tc_tt,
-                        'ga_aa': ga_aa
-                    }
-                all_mutations.append(df)
-        except Exception as e:
-            print(f"Error reading {file}: {e}")
-    
-    # Combine all mutations if we have any
-    if all_mutations:
-        try:
-            all_mutations_df = pd.concat(all_mutations, ignore_index=True)
-        except Exception as e:
-            print(f"Error combining mutation data: {e}")
-            all_mutations_df = pd.DataFrame(all_apobec_mutations)
-    else:
-        all_mutations_df = pd.DataFrame(all_apobec_mutations)
-    
-    # Now write the updated summary file
-    with open(summary_file, 'w') as f:
+    # Write summary file
+    with open("apobec_summary.txt", 'w') as f:
         f.write("APOBEC3 Mutation Analysis Summary\n")
         f.write("================================\n\n")
         
@@ -203,7 +170,7 @@ def main():
         f.write("{:<30} {:<15} {:<15} {:<15}\n".format("Sample", "Total", "TC>TT", "GA>AA"))
         f.write("{:<30} {:<15} {:<15} {:<15}\n".format("-"*30, "-"*15, "-"*15, "-"*15))
         
-        for sample, counts in sorted(existing_data.items()):
+        for sample, counts in sorted(sample_data.items()):
             f.write("{:<30} {:<15} {:<15} {:<15}\n".format(
                 sample,
                 counts['total'],
@@ -214,9 +181,9 @@ def main():
         f.write("\n\n")
         
         # Calculate overall statistics
-        total_mutations = sum(data['total'] for data in existing_data.values())
-        tc_tt_mutations = sum(data['tc_tt'] for data in existing_data.values())
-        ga_aa_mutations = sum(data['ga_aa'] for data in existing_data.values())
+        total_mutations = sum(data['total'] for data in sample_data.values())
+        tc_tt_mutations = sum(data['tc_tt'] for data in sample_data.values())
+        ga_aa_mutations = sum(data['ga_aa'] for data in sample_data.values())
         
         f.write(f"Total APOBEC3-related mutations across all samples: {total_mutations}\n")
         f.write(f"Total TC>TT mutations: {tc_tt_mutations}\n")
@@ -225,13 +192,13 @@ def main():
         # Per sample breakdown (detailed)
         f.write("Per Sample Breakdown (Detailed):\n")
         f.write("-------------------------------\n")
-        for sample, counts in sorted(existing_data.items()):
+        for sample, counts in sorted(sample_data.items()):
             f.write(f"\nSample: {sample}\n")
             f.write(f"Total mutations: {counts['total']}\n")
             f.write(f"TC>TT mutations: {counts['tc_tt']}\n")
             f.write(f"GA>AA mutations: {counts['ga_aa']}\n")
-        
-    print(f"\nUpdated summary statistics saved to {summary_file}")
+    
+    print(f"\nSummary statistics saved to apobec_summary.txt")
 
 if __name__ == '__main__':
     main() 
