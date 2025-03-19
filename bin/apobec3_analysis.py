@@ -36,6 +36,8 @@ def main():
 
     # Initialize storage for this sample's mutations
     sample_mutations = []
+    tc_tt_mutations = []
+    ga_aa_mutations = []
 
     # Iterate through variants in the VCF file
     for variant in vcf:
@@ -71,6 +73,7 @@ def main():
                     mutation_info_copy = mutation_info.copy()
                     mutation_info_copy['context'] = dinuc_ref + ">" + dinuc_alt
                     mutation_info_copy['type'] = "TC>TT"
+                    tc_tt_mutations.append(mutation_info_copy)
                     sample_mutations.append(mutation_info_copy)
                     all_apobec_mutations.append(mutation_info_copy)
             
@@ -83,6 +86,7 @@ def main():
                 mutation_info_copy = mutation_info.copy()
                 mutation_info_copy['context'] = dinuc_ref_rev + ">" + dinuc_alt_rev
                 mutation_info_copy['type'] = "GA>AA"
+                ga_aa_mutations.append(mutation_info_copy)
                 sample_mutations.append(mutation_info_copy)
                 all_apobec_mutations.append(mutation_info_copy)
                 
@@ -95,8 +99,15 @@ def main():
         sample_output_file = f"{sample_name}_apobec_mutations.csv"
         
         # Calculate sample summary statistics
-        tc_tt_count = len(sample_df[sample_df['type'] == 'TC>TT'])
-        ga_aa_count = len(sample_df[sample_df['type'] == 'GA>AA'])
+        # Ensure total mutations equals the sum of TC>TT and GA>AA
+        tc_tt_count = len(tc_tt_mutations)
+        ga_aa_count = len(ga_aa_mutations)
+        total_mutations = tc_tt_count + ga_aa_count  # Should equal len(sample_mutations)
+        
+        # Verify the counts match
+        if len(sample_mutations) != total_mutations:
+            print(f"Warning: Count mismatch - Sample mutations: {len(sample_mutations)}, TC>TT + GA>AA: {total_mutations}")
+            print(f"Adjusting total count to match sum of subtypes")
         
         # Save sample mutations to CSV
         sample_df.to_csv(sample_output_file, index=False)
@@ -104,7 +115,7 @@ def main():
         # Append summary statistics to the sample CSV file
         with open(sample_output_file, 'a') as f:
             f.write('\n\nSummary Statistics\n')
-            f.write(f'Total APOBEC3-related mutations,{len(sample_mutations)}\n')
+            f.write(f'Total APOBEC3-related mutations,{total_mutations}\n')
             f.write(f'TC>TT mutations,{tc_tt_count}\n')
             f.write(f'GA>AA mutations,{ga_aa_count}\n')
         
@@ -114,7 +125,7 @@ def main():
     print(f"\nSummary for {vcf_file}:")
     print(f"Total TC>TT mutations found: {tc_tt_count}")
     print(f"Total GA>AA mutations found: {ga_aa_count}")
-    print(f"Total APOBEC3-related mutations: {len(sample_mutations)}")
+    print(f"Total APOBEC3-related mutations: {total_mutations}")
 
     # Create a complete summary file
     # Instead of just finding files in the current directory,
@@ -131,23 +142,26 @@ def main():
             file_sample = os.path.basename(file).replace("_apobec_mutations.csv", "")
             df = pd.read_csv(file)
             
-            total_count = len(df)
+            # Count mutations by type
             tc_tt = len(df[df['type'] == 'TC>TT']) if 'type' in df.columns else 0
             ga_aa = len(df[df['type'] == 'GA>AA']) if 'type' in df.columns else 0
+            
+            # Total should be the sum of the two types
+            total_count = tc_tt + ga_aa
             
             sample_data[file_sample] = {
                 'total': total_count,
                 'tc_tt': tc_tt,
                 'ga_aa': ga_aa
             }
-            print(f"Added sample {file_sample} with {total_count} mutations")
+            print(f"Added sample {file_sample} with {total_count} mutations ({tc_tt} TC>TT, {ga_aa} GA>AA)")
         except Exception as e:
             print(f"Error reading {file}: {e}")
     
     # Store basic summary data for current sample in a file that can be combined later
     current_sample_summary = {
         'sample': sample_name,
-        'total': len(sample_mutations),
+        'total': total_mutations,
         'tc_tt': tc_tt_count,
         'ga_aa': ga_aa_count
     }
@@ -155,7 +169,7 @@ def main():
     # Write this data to a special file that can be used for combining later
     with open(f"{sample_name}_summary_data.txt", 'w') as f:
         f.write(f"Sample: {sample_name}\n")
-        f.write(f"Total: {len(sample_mutations)}\n")
+        f.write(f"Total: {total_mutations}\n")
         f.write(f"TC>TT: {tc_tt_count}\n")
         f.write(f"GA>AA: {ga_aa_count}\n")
     

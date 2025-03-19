@@ -477,9 +477,15 @@ workflow ILLUMINA {
                 try:
                     sample = file.replace("_apobec_mutations.csv", "")
                     df = pd.read_csv(file)
+                    
+                    # Calculate stats
                     total = len(df)
                     tc_tt = len(df[df['type'] == 'TC>TT']) if 'type' in df.columns else 0
                     ga_aa = len(df[df['type'] == 'GA>AA']) if 'type' in df.columns else 0
+                    
+                    # Ensure total equals sum of subtypes
+                    total = tc_tt + ga_aa
+                    
                     sample_data[sample] = {'total': total, 'tc_tt': tc_tt, 'ga_aa': ga_aa}
                     print(f"Sample {sample}: {total} mutations ({tc_tt} TC>TT, {ga_aa} GA>AA)")
                 except Exception as e:
