@@ -31,9 +31,9 @@ process APOBEC3_ANALYSIS_IVAR {
     export PIP_TARGET=/tmp/package_install
     export PYTHONPATH="/tmp/package_install"
     pip install --no-cache-dir --target=/tmp/package_install numpy==1.22.4 pandas==1.3.5 pysam==0.19.0
-    
+
     python ${apobec3_script} ${variants} ${reference}
-    
+
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         python: \$(python --version | sed 's/Python //g')

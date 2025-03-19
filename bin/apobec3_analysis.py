@@ -32,6 +32,34 @@ def main():
         vcf = pysam.VariantFile(vcf_file)
     except Exception as e:
         print(f"Error opening files for {vcf_file}: {e}")
+        
+        # Initialize empty variables
+        tc_tt_count = 0
+        ga_aa_count = 0
+        total_mutations = 0
+        total_all_mutations = 0
+        
+        # Create empty summary files
+        sample_output_file = f"{sample_name}_apobec_mutations.csv"
+        with open(sample_output_file, 'w') as f:
+            f.write('chrom,pos,ref,alt,depth,quality,sample,context,type\n\n')
+            f.write('Summary Statistics\n')
+            f.write(f'Total mutations,{total_all_mutations}\n')
+            f.write(f'Total APOBEC3-related mutations,{total_mutations}\n')
+            f.write(f'TC>TT mutations,{tc_tt_count}\n')
+            f.write(f'GA>AA mutations,{ga_aa_count}\n')
+        
+        # Write simple summary file
+        with open("apobec_summary.txt", 'w') as f:
+            f.write("APOBEC3 Mutation Analysis Summary\n")
+            f.write("================================\n\n")
+            f.write("Note: This analysis specifically focuses on single nucleotide polymorphisms (SNPs)\n")
+            f.write("and does not include insertions, deletions, or other complex variants.\n")
+            f.write("'All Mutations' refers to the total number of SNPs detected.\n\n")
+            f.write(f"Error processing {vcf_file}: {e}\n\n")
+            f.write("No mutations were analyzed due to file access error.\n")
+        
+        print(f"Created empty summary files due to error: {e}")
         sys.exit(1)
 
     # Initialize storage for this sample's mutations
@@ -39,7 +67,21 @@ def main():
     tc_tt_mutations = []
     ga_aa_mutations = []
 
-    # Iterate through variants in the VCF file
+    # Count total mutations in the VCF file
+    total_all_mutations = 0
+    for variant in vcf:
+        if variant.alts and len(variant.ref) == 1 and len(variant.alts[0]) == 1:  # Count only SNPs
+            total_all_mutations += 1
+    
+    # Reset the VCF reader to start from the beginning
+    vcf = pysam.VariantFile(vcf_file)
+
+    # Initialize count variables
+    tc_tt_count = 0
+    ga_aa_count = 0
+    total_mutations = 0
+
+    # Iterate through variants in the VCF file to find APOBEC3 mutations
     for variant in vcf:
         chrom = variant.chrom
         pos = variant.pos  # 1-based position
@@ -95,19 +137,14 @@ def main():
 
     # Create DataFrame for this sample and save to CSV
     sample_df = pd.DataFrame(sample_mutations)
+    
+    # Calculate sample summary statistics
+    tc_tt_count = len(tc_tt_mutations)
+    ga_aa_count = len(ga_aa_mutations)
+    total_mutations = tc_tt_count + ga_aa_count
+    
     if not sample_df.empty:
         sample_output_file = f"{sample_name}_apobec_mutations.csv"
-        
-        # Calculate sample summary statistics
-        # Ensure total mutations equals the sum of TC>TT and GA>AA
-        tc_tt_count = len(tc_tt_mutations)
-        ga_aa_count = len(ga_aa_mutations)
-        total_mutations = tc_tt_count + ga_aa_count  # Should equal len(sample_mutations)
-        
-        # Verify the counts match
-        if len(sample_mutations) != total_mutations:
-            print(f"Warning: Count mismatch - Sample mutations: {len(sample_mutations)}, TC>TT + GA>AA: {total_mutations}")
-            print(f"Adjusting total count to match sum of subtypes")
         
         # Save sample mutations to CSV
         sample_df.to_csv(sample_output_file, index=False)
@@ -115,79 +152,107 @@ def main():
         # Append summary statistics to the sample CSV file
         with open(sample_output_file, 'a') as f:
             f.write('\n\nSummary Statistics\n')
+            f.write(f'Total mutations,{total_all_mutations}\n')
             f.write(f'Total APOBEC3-related mutations,{total_mutations}\n')
             f.write(f'TC>TT mutations,{tc_tt_count}\n')
             f.write(f'GA>AA mutations,{ga_aa_count}\n')
         
         print(f"Sample mutations saved to {sample_output_file}")
+    else:
+        # Create empty file with just summary statistics
+        sample_output_file = f"{sample_name}_apobec_mutations.csv"
+        with open(sample_output_file, 'w') as f:
+            f.write('chrom,pos,ref,alt,depth,quality,sample,context,type\n\n')
+            f.write('Summary Statistics\n')
+            f.write(f'Total mutations,{total_all_mutations}\n')
+            f.write(f'Total APOBEC3-related mutations,{total_mutations}\n')
+            f.write(f'TC>TT mutations,{tc_tt_count}\n')
+            f.write(f'GA>AA mutations,{ga_aa_count}\n')
+        print(f"No APOBEC3 mutations found. Empty CSV with summary created: {sample_output_file}")
     
     # Print summary for this sample
     print(f"\nSummary for {vcf_file}:")
+    print(f"Total SNPs: {total_all_mutations}")
     print(f"Total TC>TT mutations found: {tc_tt_count}")
     print(f"Total GA>AA mutations found: {ga_aa_count}")
     print(f"Total APOBEC3-related mutations: {total_mutations}")
 
-    # Create a complete summary file
-    # Instead of just finding files in the current directory,
-    # Save current sample data to a dictionary
+    # Create a summary file
     sample_data = {}
     
-    # First check for files in the current directory (which includes the one we just processed)
+    # Process any existing result files and add our own
     current_files = glob.glob("*_apobec_mutations.csv")
     print(f"Found {len(current_files)} sample file(s) in current directory")
     
-    # Extract data from current sample
     for file in current_files:
         try:
             file_sample = os.path.basename(file).replace("_apobec_mutations.csv", "")
-            df = pd.read_csv(file)
             
-            # Count mutations by type
-            tc_tt = len(df[df['type'] == 'TC>TT']) if 'type' in df.columns else 0
-            ga_aa = len(df[df['type'] == 'GA>AA']) if 'type' in df.columns else 0
-            
-            # Total should be the sum of the two types
-            total_count = tc_tt + ga_aa
-            
-            sample_data[file_sample] = {
-                'total': total_count,
-                'tc_tt': tc_tt,
-                'ga_aa': ga_aa
-            }
-            print(f"Added sample {file_sample} with {total_count} mutations ({tc_tt} TC>TT, {ga_aa} GA>AA)")
+            # Try to read summary data from file
+            with open(file, 'r') as f:
+                lines = f.readlines()
+                all_muts = 0
+                apobec_muts = 0
+                tc_tt_muts = 0
+                ga_aa_muts = 0
+                
+                for i, line in enumerate(lines):
+                    if 'Total mutations,' in line:
+                        all_muts = int(line.strip().split(',')[1])
+                    elif 'Total APOBEC3-related mutations,' in line:
+                        apobec_muts = int(line.strip().split(',')[1])
+                    elif 'TC>TT mutations,' in line:
+                        tc_tt_muts = int(line.strip().split(',')[1])
+                    elif 'GA>AA mutations,' in line:
+                        ga_aa_muts = int(line.strip().split(',')[1])
+                
+                sample_data[file_sample] = {
+                    'all': all_muts,
+                    'total': apobec_muts, 
+                    'tc_tt': tc_tt_muts, 
+                    'ga_aa': ga_aa_muts
+                }
+                
+                print(f"Added sample {file_sample} with {all_muts} total mutations, {apobec_muts} APOBEC3 mutations")
         except Exception as e:
             print(f"Error reading {file}: {e}")
     
-    # Store basic summary data for current sample in a file that can be combined later
-    current_sample_summary = {
-        'sample': sample_name,
-        'total': total_mutations,
-        'tc_tt': tc_tt_count,
-        'ga_aa': ga_aa_count
-    }
-    
-    # Write this data to a special file that can be used for combining later
-    with open(f"{sample_name}_summary_data.txt", 'w') as f:
-        f.write(f"Sample: {sample_name}\n")
-        f.write(f"Total: {total_mutations}\n")
-        f.write(f"TC>TT: {tc_tt_count}\n")
-        f.write(f"GA>AA: {ga_aa_count}\n")
+    # Write our current sample data if not already in the data
+    if sample_name not in sample_data:
+        sample_data[sample_name] = {
+            'all': total_all_mutations,
+            'total': total_mutations,
+            'tc_tt': tc_tt_count,
+            'ga_aa': ga_aa_count
+        }
     
     # Write summary file
     with open("apobec_summary.txt", 'w') as f:
         f.write("APOBEC3 Mutation Analysis Summary\n")
         f.write("================================\n\n")
         
-        # Create the summary table at the top
+        # Add clarification about analysis
+        f.write("Note: This analysis specifically focuses on single nucleotide polymorphisms (SNPs)\n")
+        f.write("and does not include insertions, deletions, or other complex variants.\n")
+        f.write("'All Mutations' refers to the total number of SNPs detected.\n\n")
+        
+        # Create the summary table
         f.write("Summary Table - APOBEC3 Mutations by Sample\n")
         f.write("------------------------------------------\n")
-        f.write("{:<30} {:<15} {:<15} {:<15}\n".format("Sample", "Total", "TC>TT", "GA>AA"))
-        f.write("{:<30} {:<15} {:<15} {:<15}\n".format("-"*30, "-"*15, "-"*15, "-"*15))
+        f.write("{:<30} {:<15} {:<20} {:<15} {:<15}\n".format("Sample", "All Mutations", "APOBEC3 (%)", "TC>TT", "GA>AA"))
+        f.write("{:<30} {:<15} {:<20} {:<15} {:<15}\n".format("-"*30, "-"*15, "-"*20, "-"*15, "-"*15))
         
         for sample, counts in sorted(sample_data.items()):
-            f.write("{:<30} {:<15} {:<15} {:<15}\n".format(
+            # Calculate percentage of APOBEC3 mutations
+            all_muts = counts.get('all', 0)
+            apobec_pct = 0
+            if all_muts > 0:
+                apobec_pct = (counts['total'] / all_muts) * 100
+            
+            f.write("{:<30} {:<15} {:<20} {:<15} {:<15}\n".format(
                 sample,
-                counts['total'],
+                counts.get('all', 0),
+                f"{counts['total']} ({apobec_pct:.1f}%)",
                 counts['tc_tt'],
                 counts['ga_aa']
             ))
@@ -195,11 +260,18 @@ def main():
         f.write("\n\n")
         
         # Calculate overall statistics
+        total_all_muts = sum(data.get('all', 0) for data in sample_data.values())
         total_mutations = sum(data['total'] for data in sample_data.values())
         tc_tt_mutations = sum(data['tc_tt'] for data in sample_data.values())
         ga_aa_mutations = sum(data['ga_aa'] for data in sample_data.values())
         
-        f.write(f"Total APOBEC3-related mutations across all samples: {total_mutations}\n")
+        # Calculate overall percentage
+        overall_pct = 0
+        if total_all_muts > 0:
+            overall_pct = (total_mutations / total_all_muts) * 100
+        
+        f.write(f"Total mutations across all samples: {total_all_muts}\n")
+        f.write(f"Total APOBEC3-related mutations: {total_mutations} ({overall_pct:.1f}% of all mutations)\n")
         f.write(f"Total TC>TT mutations: {tc_tt_mutations}\n")
         f.write(f"Total GA>AA mutations: {ga_aa_mutations}\n\n")
         
@@ -207,8 +279,15 @@ def main():
         f.write("Per Sample Breakdown (Detailed):\n")
         f.write("-------------------------------\n")
         for sample, counts in sorted(sample_data.items()):
+            # Calculate percentage for individual sample
+            all_muts = counts.get('all', 0)
+            apobec_pct = 0
+            if all_muts > 0:
+                apobec_pct = (counts['total'] / all_muts) * 100
+            
             f.write(f"\nSample: {sample}\n")
-            f.write(f"Total mutations: {counts['total']}\n")
+            f.write(f"All mutations: {counts.get('all', 0)}\n")
+            f.write(f"APOBEC3 mutations: {counts['total']} ({apobec_pct:.1f}% of all mutations)\n")
             f.write(f"TC>TT mutations: {counts['tc_tt']}\n")
             f.write(f"GA>AA mutations: {counts['ga_aa']}\n")
     
