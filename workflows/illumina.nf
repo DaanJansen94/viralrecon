@@ -440,7 +440,9 @@ workflow ILLUMINA {
         APOBEC3_ANALYSIS_IVAR (
             VARIANTS_IVAR.out.vcf,
             PREPARE_GENOME.out.fasta,
-            file("$projectDir/bin/apobec3_analysis.py")
+            file("$projectDir/bin/apobec3_analysis.py"),
+            file("$projectDir/bin/count_fastq_reads.py"),
+            file(params.input)
         )
         ch_versions = ch_versions.mix(APOBEC3_ANALYSIS_IVAR.out.versions)
         
@@ -450,149 +452,33 @@ workflow ILLUMINA {
             .collect()
             .set { ch_apobec3_csvs }
             
+        // Get the read counts file
+        APOBEC3_ANALYSIS_IVAR.out.read_counts
+            .first()
+            .set { ch_read_counts }
+            
         // Make the final combined APOBEC3 summary with all samples
         process COMBINE_APOBEC3_SUMMARY {
             publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, overwrite: true
             
             input:
             path(csv_files)
+            path(read_counts_file)
             
             output:
             path "apobec_summary.txt"
             
             script:
             """
-            #!/usr/bin/env python3
-            import os
-            import glob
-            import pandas as pd
-            
-            # CSV files are directly available in the working directory
-            files = glob.glob("*_apobec_mutations.csv")
-            print(f"Found {len(files)} CSV files: {files}")
-            
-            # Process each file to extract mutation data
-            sample_data = {}
-            for file in files:
-                try:
-                    sample = file.replace("_apobec_mutations.csv", "")
-                    df = pd.read_csv(file)
-                    
-                    # Look for the total mutations count in the file
-                    all_mutations = 0
-                    try:
-                        with open(file, 'r') as f:
-                            lines = f.readlines()
-                            for line in reversed(lines):
-                                if "Total mutations," in line:
-                                    all_mutations = int(line.strip().split(',')[1])
-                                    break
-                    except Exception as e:
-                        print(f"Could not read total mutations from {file}: {e}")
-                    
-                    # If not found, try to get it from the VCF file
-                    if all_mutations == 0:
-                        vcf_file = f"{sample}.variant_calling.vcf.gz"
-                        if os.path.exists(vcf_file):
-                            try:
-                                import gzip
-                                count = 0
-                                with gzip.open(vcf_file, 'rt') as f:
-                                    for line in f:
-                                        if not line.startswith('#'):
-                                            count += 1
-                                all_mutations = count
-                                print(f"Counted {all_mutations} variants from VCF file for {sample}")
-                            except Exception as e:
-                                print(f"Error reading VCF file for {sample}: {e}")
-                    
-                    # Calculate stats
-                    total = len(df)
-                    tc_tt = len(df[df['type'] == 'TC>TT']) if 'type' in df.columns else 0
-                    ga_aa = len(df[df['type'] == 'GA>AA']) if 'type' in df.columns else 0
-                    
-                    # Ensure total equals sum of subtypes
-                    total = tc_tt + ga_aa
-                    
-                    sample_data[sample] = {
-                        'all': all_mutations,
-                        'total': total, 
-                        'tc_tt': tc_tt, 
-                        'ga_aa': ga_aa
-                    }
-                    print(f"Sample {sample}: {all_mutations} total mutations, {total} APOBEC3 mutations ({tc_tt} TC>TT, {ga_aa} GA>AA)")
-                except Exception as e:
-                    print(f"Error with {file}: {e}")
-            
-            # Create summary file
-            with open("apobec_summary.txt", "w") as f:
-                f.write("APOBEC3 Mutation Analysis Summary\\n")
-                f.write("================================\\n\\n")
-                
-                # Add clarification about SNPs vs indels
-                f.write("Note: This analysis specifically focuses on single nucleotide polymorphisms (SNPs)\\n")
-                f.write("and does not include insertions, deletions, or other complex variants.\\n")
-                f.write("'All Mutations' refers to the total number of SNPs detected.\\n")
-                f.write("Only variants with quality score > 30 are included in this analysis.\\n\\n")
-                
-                f.write("Summary Table - APOBEC3 Mutations by Sample\\n")
-                f.write("------------------------------------------\\n")
-                f.write("{:<30} {:<15} {:<20} {:<15} {:<15}\\n".format("Sample", "All Mutations", "APOBEC3 (%)", "TC>TT", "GA>AA"))
-                f.write("{:<30} {:<15} {:<20} {:<15} {:<15}\\n".format("-"*30, "-"*15, "-"*20, "-"*15, "-"*15))
-                
-                for sample, counts in sorted(sample_data.items()):
-                    # Calculate percentage of APOBEC3 mutations
-                    all_muts = counts.get('all', 0)
-                    apobec_pct = 0
-                    if all_muts > 0:
-                        apobec_pct = (counts['total'] / all_muts) * 100
-                    
-                    f.write("{:<30} {:<15} {:<20} {:<15} {:<15}\\n".format(
-                        sample, 
-                        counts.get('all', 0),
-                        f"{counts['total']} ({apobec_pct:.1f}%)",
-                        counts['tc_tt'], 
-                        counts['ga_aa']))
-                
-                f.write("\\n\\n")
-                
-                # Calculate overall statistics
-                total_all_mutations = sum(data.get('all', 0) for data in sample_data.values())
-                total_mutations = sum(data['total'] for data in sample_data.values())
-                tc_tt_mutations = sum(data['tc_tt'] for data in sample_data.values())
-                ga_aa_mutations = sum(data['ga_aa'] for data in sample_data.values())
-                
-                # Calculate overall percentage
-                overall_pct = 0
-                if total_all_mutations > 0:
-                    overall_pct = (total_mutations / total_all_mutations) * 100
-                
-                f.write(f"Total mutations across all samples: {total_all_mutations}\\n")
-                f.write(f"Total APOBEC3-related mutations: {total_mutations} ({overall_pct:.1f}% of all mutations)\\n")
-                f.write(f"Total TC>TT mutations: {tc_tt_mutations}\\n")
-                f.write(f"Total GA>AA mutations: {ga_aa_mutations}\\n\\n")
-                
-                f.write("Per Sample Breakdown (Detailed):\\n")
-                f.write("-------------------------------\\n")
-                for sample, counts in sorted(sample_data.items()):
-                    # Calculate percentage for individual sample
-                    all_muts = counts.get('all', 0)
-                    apobec_pct = 0
-                    if all_muts > 0:
-                        apobec_pct = (counts['total'] / all_muts) * 100
-                    
-                    f.write(f"\\nSample: {sample}\\n")
-                    f.write(f"All mutations: {counts.get('all', 0)}\\n")
-                    f.write(f"APOBEC3 mutations: {counts['total']} ({apobec_pct:.1f}% of all mutations)\\n")
-                    f.write(f"TC>TT mutations: {counts['tc_tt']}\\n")
-                    f.write(f"GA>AA mutations: {counts['ga_aa']}\\n")
-            
-            print("Summary file created successfully")
+            python3 $projectDir/bin/combine_apobec_summaries.py .
             """
         }
         
         // Connect the CSV files to the combine process
-        COMBINE_APOBEC3_SUMMARY(ch_apobec3_csvs)
+        COMBINE_APOBEC3_SUMMARY (
+            ch_apobec3_csvs,
+            ch_read_counts
+        )
     }
 
     //

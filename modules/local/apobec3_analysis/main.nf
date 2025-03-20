@@ -9,16 +9,20 @@ process APOBEC3_ANALYSIS_IVAR {
 
     publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, pattern: "*_apobec_mutations.csv"
     publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, pattern: "apobec_summary.txt"
+    publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, pattern: "read_counts.csv"
     publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, pattern: "versions.yml"
 
     input:
     tuple val(meta), path(variants)
     path(reference)
     path(apobec3_script)
+    path(count_reads_script)
+    path(samplesheet)
 
     output:
     tuple val(meta), path("*_apobec_mutations.csv"), emit: csv
     path("apobec_summary.txt"), emit: summary
+    path("read_counts.csv"), emit: read_counts
     path "versions.yml", emit: versions
 
     when:
@@ -32,6 +36,10 @@ process APOBEC3_ANALYSIS_IVAR {
     export PYTHONPATH="/tmp/package_install"
     pip install --no-cache-dir --target=/tmp/package_install numpy==1.22.4 pandas==1.3.5 pysam==0.19.0
 
+    # Count raw reads from samplesheet
+    python ${count_reads_script} ${samplesheet}
+
+    # Run APOBEC3 analysis
     python ${apobec3_script} ${variants} ${reference}
 
     cat <<-END_VERSIONS > versions.yml
