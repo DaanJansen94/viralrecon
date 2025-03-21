@@ -60,6 +60,7 @@ include { MULTIQC  } from '../modules/local/multiqc_illumina'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME   } from '../modules/local/plot_mosdepth_regions'
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_AMPLICON } from '../modules/local/plot_mosdepth_regions'
 include { APOBEC3_ANALYSIS_IVAR } from '../modules/local/apobec3_analysis/main'
+include { MUTATION_ANALYSIS_IVAR } from '../modules/local/mutation_analysis/main'
 
 //
 // SUBWORKFLOW: Consisting of a mix of local and nf-core/modules
@@ -437,47 +438,25 @@ workflow ILLUMINA {
         ch_snpsift_txt            = VARIANTS_IVAR.out.snpsift_txt
         ch_versions               = ch_versions.mix(VARIANTS_IVAR.out.versions)
 
-        APOBEC3_ANALYSIS_IVAR (
-            VARIANTS_IVAR.out.vcf,
-            PREPARE_GENOME.out.fasta,
-            file("$projectDir/bin/apobec3_analysis.py"),
-            file("$projectDir/bin/count_fastq_reads.py"),
-            file(params.input)
+        // Run mutation analysis
+        MUTATION_ANALYSIS_IVAR (
+            VARIANTS_IVAR.out.tsv
+                .map { meta, tsv -> tsv }
+                .collect()
+                .map { tsv_files -> 
+                    def meta = [id: "all_samples"]
+                    [meta, tsv_files.flatten()]
+                },
+            FASTQ_ALIGN_BOWTIE2.out.stats
+                .map { meta, stats -> stats }
+                .collect(),
+            file("$projectDir/bin/analyze_mutations.py")
         )
-        ch_versions = ch_versions.mix(APOBEC3_ANALYSIS_IVAR.out.versions)
+        ch_versions = ch_versions.mix(MUTATION_ANALYSIS_IVAR.out.versions)
         
-        // Wait for all APOBEC3 analyses to finish and trigger the summary
-        APOBEC3_ANALYSIS_IVAR.out.csv
-            .map { it[1] }
-            .collect()
-            .set { ch_apobec3_csvs }
-            
-        // Get the read counts file
-        APOBEC3_ANALYSIS_IVAR.out.read_counts
-            .first()
-            .set { ch_read_counts }
-            
-        // Make the final combined APOBEC3 summary with all samples
-        process COMBINE_APOBEC3_SUMMARY {
-            publishDir "${params.outdir}/variants/ivar/apobec3", mode: params.publish_dir_mode, overwrite: true
-            
-            input:
-            path(csv_files)
-            path(read_counts_file)
-            
-            output:
-            path "apobec_summary.txt"
-            
-            script:
-            """
-            python3 $projectDir/bin/combine_apobec_summaries.py .
-            """
-        }
-        
-        // Connect the CSV files to the combine process
-        COMBINE_APOBEC3_SUMMARY (
-            ch_apobec3_csvs,
-            ch_read_counts
+        // Add mutation summary to MultiQC
+        ch_multiqc_files = ch_multiqc_files.mix(
+            MUTATION_ANALYSIS_IVAR.out.summary.ifEmpty([])
         )
     }
 
