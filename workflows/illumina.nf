@@ -440,7 +440,7 @@ workflow ILLUMINA {
 
         // Run mutation analysis
         MUTATION_ANALYSIS_IVAR (
-            VARIANTS_IVAR.out.tsv
+            VARIANTS_IVAR.out.tsv  // This output now contains the filtered variants from our new module
                 .map { meta, tsv -> tsv }
                 .collect()
                 .map { tsv_files -> 

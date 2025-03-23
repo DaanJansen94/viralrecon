@@ -3,6 +3,7 @@
 //
 
 include { IVAR_VARIANTS         } from '../../modules/nf-core/ivar/variants/main'
+include { FILTER_IVAR_VARIANTS  } from '../../modules/local/filter_ivar_variants'
 include { IVAR_VARIANTS_TO_VCF  } from '../../modules/local/ivar_variants_to_vcf'
 include { BCFTOOLS_SORT         } from '../../modules/nf-core/bcftools/sort/main'
 include { VCF_TABIX_STATS       } from './vcf_tabix_stats'
@@ -44,7 +45,16 @@ workflow VARIANTS_IVAR {
         .set { ch_ivar_tsv }
 
     //
-    // Convert original iVar output to VCF, zip and index
+    // Filter variants in TSV format (ONLY for mutation analysis)
+    //
+    FILTER_IVAR_VARIANTS (
+        ch_ivar_tsv
+    )
+    ch_versions = ch_versions.mix(FILTER_IVAR_VARIANTS.out.versions.first())
+
+    //
+    // Convert iVar output to VCF, zip and index
+    // Note: Using the original unfiltered TSV here
     //
     IVAR_VARIANTS_TO_VCF (
         ch_ivar_tsv,
@@ -58,6 +68,9 @@ workflow VARIANTS_IVAR {
     )
     ch_versions = ch_versions.mix(BCFTOOLS_SORT.out.versions.first())
 
+    //
+    // Index and get stats for the VCF
+    //
     VCF_TABIX_STATS (
         BCFTOOLS_SORT.out.vcf,
         [],
@@ -71,7 +84,7 @@ workflow VARIANTS_IVAR {
     //
     VARIANTS_QC (
         bam,
-        BCFTOOLS_SORT.out.vcf,
+        VCF_TABIX_STATS.out.vcf,
         VCF_TABIX_STATS.out.stats,
         fasta,
         sizes,
@@ -83,13 +96,13 @@ workflow VARIANTS_IVAR {
     ch_versions = ch_versions.mix(VARIANTS_QC.out.versions)
 
     emit:
-    tsv             = ch_ivar_tsv                     // channel: [ val(meta), [ tsv ] ]
-
+    tsv             = FILTER_IVAR_VARIANTS.out.tsv    // channel: [ val(meta), [ tsv ] ] - Filtered TSV (for mutation analysis)
+    raw_tsv         = ch_ivar_tsv                     // channel: [ val(meta), [ tsv ] ] - Original unfiltered TSV
     vcf_orig        = IVAR_VARIANTS_TO_VCF.out.vcf    // channel: [ val(meta), [ vcf ] ]
     log_out         = IVAR_VARIANTS_TO_VCF.out.log    // channel: [ val(meta), [ log ] ]
     multiqc_tsv     = IVAR_VARIANTS_TO_VCF.out.tsv    // channel: [ val(meta), [ tsv ] ]
 
-    vcf             = BCFTOOLS_SORT.out.vcf           // channel: [ val(meta), [ vcf ] ]
+    vcf             = VCF_TABIX_STATS.out.vcf         // channel: [ val(meta), [ vcf ] ]
     tbi             = VCF_TABIX_STATS.out.tbi         // channel: [ val(meta), [ tbi ] ]
     csi             = VCF_TABIX_STATS.out.csi         // channel: [ val(meta), [ csi ] ]
     stats           = VCF_TABIX_STATS.out.stats       // channel: [ val(meta), [ txt ] ]

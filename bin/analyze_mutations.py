@@ -77,18 +77,25 @@ def main():
     # Process all samples and collect results
     results = []
     for variant_file in variant_files:
-        base_name = os.path.basename(variant_file)[:-4]  # Remove .tsv
-        stats_file = os.path.join(stats_dir, f"{base_name}.sorted.bam.stats")
+        base_name = os.path.basename(variant_file)
+        # Extract sample name without the .filtered.tsv suffix
+        if '.filtered.tsv' in base_name:
+            sample_name = base_name.replace('.filtered.tsv', '')
+        else:
+            sample_name = base_name.replace('.tsv', '')
+            
+        # Try to find the stats file with the correct naming pattern
+        stats_file = os.path.join(stats_dir, f"{sample_name}.sorted.bam.stats")
         
         if not os.path.isfile(stats_file):
             print(f"Warning: Stats file not found for {base_name}: {stats_file}")
             continue
         
-        print(f"Processing sample: {base_name}")
+        print(f"Processing sample: {sample_name}")
         print(f"  Variant file: {variant_file}")
         print(f"  Stats file: {stats_file}")
         
-        result = process_sample(variant_file, stats_file, base_name)
+        result = process_sample(variant_file, stats_file, sample_name)
         results.append(result)
     
     if not results:
@@ -120,35 +127,18 @@ def main():
         f.write("------------------------------------------\n\n")
         
         # Write header
-        f.write(f"{'Sample':<40} {'MPXV Reads':>12} {'All SNPs':>10} {'Major SNPs':>12} {'Major APOBEC3':>20} "
-                f"{'Minor SNPs':>12} {'Minor APOBEC3':>20} {'APM':>12}\n")
-        f.write("-" * 140 + "\n")
+        f.write(f"{'Sample':<30} {'Reads':<10} {'All Muts':<10} {'Major Muts':<10} {'Major APOB':<10} {'Major %':<10} {'Minor Muts':<10} {'Minor APOB':<10} {'Minor %':<10} {'APM':<10}\n")
+        f.write('-' * 130 + '\n')
         
-        # Write sample results
+        # Write each sample
         for r in results:
-            f.write(f"{r['sample']:<40} {r['reads']:>12} {r['all_muts']:>10} {r['major_muts']:>12} "
-                    f"{r['major_apobec']:>12} ({r['major_apobec_perc']:>4.1f}%) {r['minor_muts']:>12} "
-                    f"{r['minor_apobec']:>12} ({r['minor_apobec_perc']:>4.1f}%) {r['apm']:>12.1f}\n")
+            f.write(f"{r['sample']:<30} {r['reads']:<10} {r['all_muts']:<10} {r['major_muts']:<10} {r['major_apobec']:<10} {r['major_apobec_perc']:<10.2f} {r['minor_muts']:<10} {r['minor_apobec']:<10} {r['minor_apobec_perc']:<10.2f} {r['apm']:<10.2f}\n")
         
         # Write totals
-        f.write("-" * 140 + "\n")
-        f.write(f"{'TOTAL':<40} {total_reads:>12} {total_muts:>10} {total_major:>12} "
-                f"{total_major_apobec:>12} ({total_major_perc:>4.1f}%) {total_minor:>12} "
-                f"{total_minor_apobec:>12} ({total_minor_perc:>4.1f}%) {total_apm:>12.1f}\n\n")
-        
-        # Write summary
-        f.write("Analysis Summary:\n")
-        f.write("------------------------\n")
-        f.write(f"Total samples analyzed: {len(results)}\n")
-        f.write(f"Total mutations (all samples): {total_muts}\n")
-        f.write(f"Total MPXV reads (all samples): {total_reads}\n")
-        f.write(f"Total major mutations: {total_major}\n")
-        f.write(f"Total major APOBEC3 mutations: {total_major_apobec} ({total_major_perc:.1f}%)\n")
-        f.write(f"Total minor mutations: {total_minor}\n")
-        f.write(f"Total minor APOBEC3 mutations: {total_minor_apobec} ({total_minor_perc:.1f}%)\n")
-        f.write(f"Total APM: {total_apm:.1f}\n")
+        f.write('-' * 130 + '\n')
+        f.write(f"{'TOTAL':<30} {total_reads:<10} {total_muts:<10} {total_major:<10} {total_major_apobec:<10} {total_major_perc:<10.2f} {total_minor:<10} {total_minor_apobec:<10} {total_minor_perc:<10.2f} {total_apm:<10.2f}\n")
     
-    print(f"Analysis complete. Results written to: {output_file}")
-
-if __name__ == "__main__":
+    print(f"Results written to {output_file}")
+    
+if __name__ == '__main__':
     main() 
