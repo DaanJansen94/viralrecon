@@ -43,6 +43,18 @@ nextflow run viralrecon -profile docker \
 --filter_indels 
 ```
 
+## APOBEC3 variant analysis
+
+The pipeline also includes support for APOBEC3-specific variant analysis. APOBEC3 is a family of cytidine deaminases that can induce G-to-A and C-to-T mutations in viral genomes. These specific mutation signatures can provide insights into host-pathogen interactions and viral evolution.
+
+Two types of APOBEC3 analysis are supported:
+
+1. **APOBEC3 summary statistics**: The pipeline generates a report with mutation counts, percentages of APOBEC3-type mutations, and APM (APOBEC3 Mutations Per Million reads) metrics.
+
+2. **APOBEC3 variant extraction**: The pipeline automatically extracts all APOBEC3-type mutations (G-to-A and C-to-T) from variant calling results into separate TSV files. This makes it easier to focus specifically on these mutations without having to filter through larger variant files. These extracted variants are available in the `variants/ivar/apobec3/` directory of the pipeline output.
+
+The same parameters used for low-frequency variant calling (`--min_allele_frequency` and `--min_alt_dp`) are also applied to APOBEC3 variant filtering, allowing you to focus on mutations above specific frequency and depth thresholds.
+
 ## Pipeline summary
 
 The pipeline has numerous options to allow you to run only specific aspects of the workflow if you so wish. For example, for Illumina data you can skip the host read filtering step with Kraken 2 with `--skip_kraken2` or you can skip all of the assembly steps with the `--skip_assembly` parameter. See the [usage](https://nf-co.re/viralrecon/usage) and [parameter](https://nf-co.re/viralrecon/parameters) docs for all of the available options when running the pipeline.

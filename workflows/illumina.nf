@@ -61,6 +61,8 @@ include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_GENOME   } from '../mod
 include { PLOT_MOSDEPTH_REGIONS as PLOT_MOSDEPTH_REGIONS_AMPLICON } from '../modules/local/plot_mosdepth_regions'
 include { APOBEC3_ANALYSIS_IVAR } from '../modules/local/apobec3_analysis/main'
 include { MUTATION_ANALYSIS_IVAR } from '../modules/local/mutation_analysis/main'
+include { EXTRACT_APOBEC3_VARIANTS } from '../modules/local/extract_apobec3_variants/main'
+include { COMBINE_APOBEC3_VARIANTS } from '../modules/local/combine_apobec3_variants/main'
 
 //
 // SUBWORKFLOW: Consisting of a mix of local and nf-core/modules
@@ -445,7 +447,7 @@ workflow ILLUMINA {
                 .collect()
                 .map { tsv_files -> 
                     def meta = [id: "all_samples"]
-                    [meta, tsv_files.flatten()]
+                    return [ meta, tsv_files ] 
                 },
             FASTQ_ALIGN_BOWTIE2.out.stats
                 .map { meta, stats -> stats }
@@ -458,6 +460,31 @@ workflow ILLUMINA {
         ch_multiqc_files = ch_multiqc_files.mix(
             MUTATION_ANALYSIS_IVAR.out.summary.ifEmpty([])
         )
+
+        // Extract APOBEC3 variants (G>A and C>T mutations) from iVar results
+        if (!params.skip_variants) {
+            EXTRACT_APOBEC3_VARIANTS (
+                VARIANTS_IVAR.out.tsv,
+                file("${projectDir}/bin/extract_apobec3_variants.py"),
+                params.min_allele_frequency,
+                params.min_alt_dp
+            )
+            ch_versions = ch_versions.mix(EXTRACT_APOBEC3_VARIANTS.out.versions)
+            
+            // Collect all minor variant files and run the combine process
+            COMBINE_APOBEC3_VARIANTS (
+                EXTRACT_APOBEC3_VARIANTS.out.minor_tsv.map { meta, file -> file }.collect()
+            )
+            ch_versions = ch_versions.mix(COMBINE_APOBEC3_VARIANTS.out.versions)
+            
+            // Add the summary files to the multiqc_files channel if needed
+            if (params.multiqc_report) {
+                ch_multiqc_files = ch_multiqc_files.mix(
+                    COMBINE_APOBEC3_VARIANTS.out.summary_tsv.ifEmpty([]),
+                    COMBINE_APOBEC3_VARIANTS.out.summary_txt.ifEmpty([])
+                )
+            }
+        }
     }
 
     //
