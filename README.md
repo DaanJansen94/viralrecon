@@ -21,6 +21,28 @@ On release, automated continuous integration tests run the pipeline on a full-si
 
 The pipeline is built using [Nextflow](https://www.nextflow.io), a workflow tool to run tasks across multiple compute infrastructures in a very portable manner. It uses Docker/Singularity containers making installation trivial and results highly reproducible. The [Nextflow DSL2](https://www.nextflow.io/docs/latest/dsl2.html) implementation of this pipeline uses one container per process which makes it much easier to maintain and update software dependencies. Where possible, these processes have been submitted to and installed from [nf-core/modules](https://github.com/nf-core/modules) in order to make them available to all nf-core pipelines, and to everyone within the Nextflow community!
 
+## Low-frequency variant calling
+
+This pipeline includes support for detecting low-frequency variants, which can be important for studying viral evolution, identifying minor variants in mixed infections, or detecting emerging mutations in a viral population. To enable low-frequency variant calling using iVar, you can use the following parameters:
+
+- `--min_allele_frequency` - Sets the minimum allele frequency threshold for variant calling with iVar (default: 0.25). Lower values such as 0.0025 (0.25%) allow detection of very rare variants.
+- `--min_alt_dp` - Minimum number of reads supporting the alternative allele (default: 5). This helps filter out sequencing errors.
+- `--filter_indels` - Whether to remove indels from iVar variant calls (default: true) and focus only on SNPs.
+
+Example command for low-frequency variant detection:
+```bash
+nextflow run viralrecon -profile docker \
+--input samplesheet.csv \
+--outdir Output1 \
+--platform illumina \
+--protocol metagenomic \
+--genome NC_063383.1 \
+--variant_caller ivar \
+--min_allele_frequency 0.0025 \
+--min_alt_dp 5 \
+--filter_indels 
+```
+
 ## Pipeline summary
 
 The pipeline has numerous options to allow you to run only specific aspects of the workflow if you so wish. For example, for Illumina data you can skip the host read filtering step with Kraken 2 with `--skip_kraken2` or you can skip all of the assembly steps with the `--skip_assembly` parameter. See the [usage](https://nf-co.re/viralrecon/usage) and [parameter](https://nf-co.re/viralrecon/parameters) docs for all of the available options when running the pipeline.
