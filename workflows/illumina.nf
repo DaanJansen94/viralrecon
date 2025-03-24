@@ -477,13 +477,11 @@ workflow ILLUMINA {
             )
             ch_versions = ch_versions.mix(COMBINE_APOBEC3_VARIANTS.out.versions)
             
-            // Add the summary files to the multiqc_files channel if needed
-            if (params.multiqc_report) {
-                ch_multiqc_files = ch_multiqc_files.mix(
-                    COMBINE_APOBEC3_VARIANTS.out.summary_tsv.ifEmpty([]),
-                    COMBINE_APOBEC3_VARIANTS.out.summary_txt.ifEmpty([])
-                )
-            }
+            // Add the summary files to the multiqc_files channel
+            ch_multiqc_files = ch_multiqc_files.mix(
+                COMBINE_APOBEC3_VARIANTS.out.summary_tsv.ifEmpty([]),
+                COMBINE_APOBEC3_VARIANTS.out.summary_txt.ifEmpty([])
+            )
         }
     }
 
