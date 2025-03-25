@@ -131,7 +131,9 @@ def main():
         f.write('-' * 130 + '\n')
         
         # Write each sample
-        for r in results:
+        # Sort results by sample name
+        sorted_results = sorted(results, key=lambda x: x['sample'])
+        for r in sorted_results:
             f.write(f"{r['sample']:<30} {r['reads']:<10} {r['all_muts']:<10} {r['major_muts']:<10} {r['major_apobec']:<10} {r['major_apobec_perc']:<10.2f} {r['minor_muts']:<10} {r['minor_apobec']:<10} {r['minor_apobec_perc']:<10.2f} {r['apm']:<10.2f}\n")
         
         # Write totals
