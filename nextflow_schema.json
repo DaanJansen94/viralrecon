@@ -141,7 +141,14 @@
                     "type": "boolean",
                     "default": false,
                     "fa_icon": "fas fa-filter",
-                    "description": "Filter out insertions and deletions, keeping only SNPs."
+                    "description": "Filter out insertions and deletions, keeping only SNPs.",
+                    "mask": {
+                        "type": "string",
+                        "description": "Specify which masking file to use for filtering variants from repetitive regions (cladeI or cladeII).",
+                        "fa_icon": "fas fa-mask",
+                        "enum": ["cladeI", "cladeII"],
+                        "help_text": "If specified, variants falling within the regions defined in the corresponding masking file will be filtered out."
+                    }
                 }
             }
         },

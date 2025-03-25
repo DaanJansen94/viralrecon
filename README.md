@@ -258,3 +258,22 @@ You can cite the `nf-core` publication as follows:
 > Philip Ewels, Alexander Peltzer, Sven Fillinger, Harshil Patel, Johannes Alneberg, Andreas Wilm, Maxime Ulysse Garcia, Paolo Di Tommaso & Sven Nahnsen.
 >
 > _Nat Biotechnol._ 2020 Feb 13. doi: [10.1038/s41587-020-0439-x](https://dx.doi.org/10.1038/s41587-020-0439-x).
+
+## Pipeline parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `--mask` | Optional. Specify which masking file to use for filtering variants from repetitive regions. Accepts either 'cladeI' or 'cladeII'. When specified, variants falling within the regions defined in the corresponding masking file will be filtered out. |
+
+## Masking Files
+
+The pipeline includes masking files for filtering out variants in repetitive regions:
+
+- `assets/mask_files/to_mask.cladei.csv`: Contains regions to mask for Clade I
+- `assets/mask_files/to_mask.cladeii.csv`: Contains regions to mask for Clade II
+
+These files contain the following columns:
+- `Minimum`: Start position of the region to mask
+- `Maximum`: End position of the region to mask
+
+When using the `--mask` parameter with either 'cladeI' or 'cladeII', variants falling within these regions will be filtered out before the final output.

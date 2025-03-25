@@ -25,6 +25,18 @@ workflow VARIANTS_IVAR {
 
     ch_versions = Channel.empty()
 
+    // Get the appropriate mask file based on the mask parameter
+    def mask_file = "None"
+    if (params.mask) {
+        def mask_path = "${projectDir}/assets/mask_files/to_mask.${params.mask.toLowerCase()}.csv"
+        if (file(mask_path).exists()) {
+            mask_file = file(mask_path)
+        } else {
+            log.error "Mask file not found: ${mask_path}"
+            exit 1
+        }
+    }
+
     //
     // Call variants
     //
@@ -48,7 +60,8 @@ workflow VARIANTS_IVAR {
     // Filter variants in TSV format (ONLY for mutation analysis)
     //
     FILTER_IVAR_VARIANTS (
-        ch_ivar_tsv
+        ch_ivar_tsv,
+        mask_file
     )
     ch_versions = ch_versions.mix(FILTER_IVAR_VARIANTS.out.versions.first())
 
