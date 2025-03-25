@@ -8,8 +8,6 @@ process FILTER_IVAR_VARIANTS {
         'python:3.9.5' }"
 
     publishDir "${params.outdir}/variants/ivar", mode: params.publish_dir_mode, pattern: "*.filtered.tsv"
-    publishDir "${params.outdir}/variants/ivar/log", mode: params.publish_dir_mode, pattern: "*.filter_stats.log"
-    publishDir "${params.outdir}/variants/ivar/masked", mode: params.publish_dir_mode, pattern: "*.masked.tsv"
 
     input:
     tuple val(meta), path(tsv)
@@ -90,14 +88,13 @@ try:
         masked_filtered = df[df['POS'].isin(masked_positions)]
         filter_stats['masked'] = len(masked_filtered)
         
-        # Save masked variants to a separate file with additional information
-        if len(masked_filtered) > 0:
-            masked_filtered['MASKED_REGION'] = masked_filtered['POS'].apply(
-                lambda x: next((f"{row['Minimum']}-{row['Maximum']}" 
-                              for _, row in mask_df.iterrows() 
-                              if row['Minimum'] <= x <= row['Maximum']), '')
-            )
-            masked_filtered.to_csv("${prefix}.masked.tsv", sep='\\t', index=False)
+        # Always create masked.tsv file, even if empty
+        masked_filtered['MASKED_REGION'] = masked_filtered['POS'].apply(
+            lambda x: next((f"{row['Minimum']}-{row['Maximum']}" 
+                          for _, row in mask_df.iterrows() 
+                          if row['Minimum'] <= x <= row['Maximum']), '')
+        )
+        masked_filtered.to_csv("${prefix}.masked.tsv", sep='\\t', index=False)
         
         df = df[~df['POS'].isin(masked_positions)]
         print(f"Variants filtered by masking: {filter_stats['masked']}")
