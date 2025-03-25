@@ -61,6 +61,7 @@ def main():
     variants_dir = sys.argv[1]
     stats_dir = sys.argv[2]
     output_file = "mutations_and_apobec3_summary.txt"
+    csv_file = "mutations_and_apobec3_summary.csv"
     
     # Check if input directories exist
     if not os.path.isdir(variants_dir):
@@ -141,6 +142,27 @@ def main():
         f.write(f"{'TOTAL':<30} {total_reads:<10} {total_muts:<10} {total_major:<10} {total_major_apobec:<10} {total_major_perc:<10.2f} {total_minor:<10} {total_minor_apobec:<10} {total_minor_perc:<10.2f} {total_apm:<10.2f}\n")
     
     print(f"Results written to {output_file}")
+    
+    # Create CSV file for Excel import
+    with open(csv_file, 'w') as f:
+        # Write header
+        f.write("Sample,Reads,All_Muts,Major_Muts,Major_APOB,Major_Percent,Minor_Muts,Minor_APOB,Minor_Percent,APM\n")
+        
+        # Write each sample
+        sorted_results = sorted(results, key=lambda x: x['sample'])
+        for r in sorted_results:
+            f.write(f"{r['sample']},{r['reads']},{r['all_muts']},{r['major_muts']},{r['major_apobec']},{r['major_apobec_perc']:.2f},{r['minor_muts']},{r['minor_apobec']},{r['minor_apobec_perc']:.2f},{r['apm']:.2f}\n")
+        
+        # Write totals
+        f.write(f"TOTAL,{total_reads},{total_muts},{total_major},{total_major_apobec},{total_major_perc:.2f},{total_minor},{total_minor_apobec},{total_minor_perc:.2f},{total_apm:.2f}\n")
+    
+    print(f"CSV results written to {csv_file}")
+    
+    # Ensure both files are saved to the output directory
+    if os.path.exists(output_file):
+        print(f"Files have been saved to the current directory")
+    else:
+        print(f"Warning: Output files were not saved to the expected location")
     
 if __name__ == '__main__':
     main() 

@@ -8,6 +8,7 @@ process MUTATION_ANALYSIS_IVAR {
         'python:3.9.5' }"
 
     publishDir "${params.outdir}/variants/ivar/mutation_analysis", mode: params.publish_dir_mode, pattern: "mutations_and_apobec3_summary.txt"
+    publishDir "${params.outdir}/variants/ivar/mutation_analysis", mode: params.publish_dir_mode, pattern: "mutations_and_apobec3_summary.csv"
     publishDir "${params.outdir}/variants/ivar/mutation_analysis", mode: params.publish_dir_mode, pattern: "versions.yml"
 
     input:
@@ -17,6 +18,7 @@ process MUTATION_ANALYSIS_IVAR {
 
     output:
     path("mutations_and_apobec3_summary.txt"), emit: summary
+    path("mutations_and_apobec3_summary.csv"), emit: csv
     path "versions.yml", emit: versions
 
     when:
